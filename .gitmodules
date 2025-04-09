@@ -1,0 +1,4 @@
+[submodule "3rdparty/finetrainers"]
+	path = 3rdparty/finetrainers
+	url = git@github.com:a-r-r-o-w/finetrainers.git
+    commit = 1328f92e9524b228f7f8f2a94dc8db79d2ad524e
