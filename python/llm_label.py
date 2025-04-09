@@ -1,6 +1,6 @@
 import os
 import torch
-from typing import List
+from typing import List, Tuple
 import tqdm
 from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor # type: ignore
 from qwen_vl_utils import process_vision_info
@@ -31,7 +31,7 @@ def get_input(abs_path: str):
     )
     return process_vision_info(messages), text # type: ignore
 
-def process_batch(vision_info, texts: List[str]):
+def process_batch(vision_info, texts: List[str]) -> List[Tuple[str, str]]:
     image_inputs, video_inputs = vision_info
     inputs = processor(
         text=texts,
@@ -51,7 +51,7 @@ def process_batch(vision_info, texts: List[str]):
     return output_text
 
 @torch.inference_mode()
-def process(batch_size: int = 1):
+def process(batch_size: int = 1, path = "data/pixiv") -> List[Tuple[str, str]]:
     pwd = os.path.dirname(os.path.abspath(__file__))
     batch = []
     def run_batch():
@@ -64,25 +64,34 @@ def process(batch_size: int = 1):
             image_inputs += image
         text_inputs = [b[1] for b in batch]
         result = process_batch((image_inputs, video_inputs), text_inputs)
-        batch.clear()
-        assert len(result) == len(text_inputs)
+        assert len(result) == len(batch), f"{len(result)} != {len(batch)}"
         ret = []
-        for t, b in zip(result, batch):
-            ret.append((b[2], t))
+        for i in range(len(result)):
+            print(i, result[i], batch[i][2])
+            # (path, output) 
+            ret.append((batch[i][2], result[i]))
+        batch.clear()
         return ret
 
     final_results = []
 
-    for file in tqdm.tqdm(os.listdir("data")):
+    for file in tqdm.tqdm(os.listdir(path)):
         if not file.endswith((".jpg", ".png")):
             continue
 
-        abs_path = abs_file = str(os.path.join(pwd, "data", file))
+        abs_path = abs_file = str(os.path.join(pwd, path, file))
         abs_path = abs_path.replace(".jpg", "")
         abs_path = abs_path.replace(".png", "")
 
         vision_info, text = get_input(abs_file)
         batch.append((vision_info, text, abs_path))
         if len(batch) == batch_size:
+            print("DEBUG", final_results)
             final_results += run_batch()
     return final_results + run_batch()
+
+if __name__ == "__main__":
+    result = process(1, "data")
+    for file, text in result:
+        with open(file + ".tmp.1", "w") as f:
+            f.write(text)
