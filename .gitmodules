@@ -1,7 +1,8 @@
 [submodule "3rdparty/finetrainers"]
 	path = 3rdparty/finetrainers
 	url = git@github.com:a-r-r-o-w/finetrainers.git
-	commit = 1328f92e9524b228f7f8f2a94dc8db79d2ad524e
+	commit = 82056c8dc65d12858771504c99d37215c8d45f24
 [submodule "3rdparty/AveMujica"]
 	path = 3rdparty/AveMujica
 	url = git@github.com:serser322/ave-mujica-images.git
+	commit = bbce0c77a9218934a421e1277a4f05884a3aac9f
