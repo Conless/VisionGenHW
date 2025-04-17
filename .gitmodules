@@ -1,7 +1,7 @@
 [submodule "3rdparty/finetrainers"]
 	path = 3rdparty/finetrainers
 	url = git@github.com:DarkSharpness/finetrainers.git
-    branch = hw
+    branch = hw_stable
 [submodule "3rdparty/AveMujica"]
 	path = 3rdparty/AveMujica
 	url = git@github.com:serser322/ave-mujica-images.git
