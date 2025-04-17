@@ -19,11 +19,11 @@ def merge_and_save(
         pipe.unload_lora_weights()
         pipe.save_pretrained(output_path)
 
-if __name__ == "main":
+if __name__ == "__main__":
     import sys
     if len(sys.argv) != 3:
         print("Usage: python merge_lora.py <lora_path> <output_path>")
         sys.exit(1)
-    lora_path = sys.argv[2]
-    output_path = sys.argv[3]
+    lora_path = sys.argv[1]
+    output_path = sys.argv[2]
     merge_and_save([lora_path], [output_path])
