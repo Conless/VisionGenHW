@@ -1,5 +1,6 @@
 import argparse
 import os
+from typing import List
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Training lora on a custom dataset.")
@@ -86,6 +87,28 @@ def parse_args() -> argparse.Namespace:
         default=2,
         help="Maximum number of checkpoints to keep."
     )
+    parser.add_argument(
+        "--online",
+        action="store_true",
+        help="Run in online mode."
+    )
+    parser.add_argument(
+        "--tp-size", "--tp",
+        type=int,
+        default=1,
+        help="Tensor parallel size."
+    )
+    parser.add_argument(
+        "--dp-size", "--dp",
+        type=int,
+        default=1,
+        help="Data parallel size."
+    )
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help="Use full parameter training instead of lora."
+    )
     return parser.parse_args()
 
 def main():
@@ -105,6 +128,11 @@ def main():
     precomputation_once: bool        = args.precomputation_once
     training_steps: int              = args.training_steps
     max_checkpoints: int             = args.max_checkpoints
+    online_mode: bool                = args.online
+    tp_size: int                     = args.tp_size
+    dp_size: int                     = args.dp_size
+    full: bool                       = args.full
+    num_gpus: int                    = dp_size * tp_size
 
     cache_path = f"{directory}/{cache_dir}"
     os.makedirs(cache_path, exist_ok=True)
@@ -114,15 +142,17 @@ def main():
 
     if resume_checkpoint < 0:
         # find latest checkpoint folder
+        try_resume_list: List[int] = []
         for folder in os.listdir(cache_path):
             if folder.startswith("finetrainers_step_"):
                 assert os.path.isdir(os.path.join(cache_path, folder))
-                resume_checkpoint = int(folder.split("_")[-1])
-                break
-            print(f"Found checkpoint folder: {folder}")
-        else:
+                try_resume_list.append(int(folder.split("_")[-1]))
+        if not try_resume_list:
             print("No checkpoint found, starting from scratch.")
             resume_checkpoint = 0
+        else:
+            resume_checkpoint = max(try_resume_list)
+            print(f"Resuming from checkpoint {resume_checkpoint}.")
 
     training_steps += resume_checkpoint # exclude the resume checkpoint from the training steps
     max_checkpoints = max(2, max_checkpoints) # ensure at least 2 checkpoints are kept
@@ -130,10 +160,10 @@ def main():
     parallel_cmd = [
         "--parallel_backend ptd",
         "--pp_degree 1",
-        "--dp_degree 1",
+        f"--dp_degree {dp_size}",
         "--dp_shards 1",
         "--cp_degree 1",
-        "--tp_degree 1",
+        f"--tp_degree {tp_size}",
     ]
     model_cmd = [
         "--model_name flux",
@@ -162,6 +192,15 @@ def main():
         "--enable_slicing",
         "--enable_tiling",
     ]
+
+    if full:
+        # remove --lora_alpha and --rank and --target_modules
+        training_cmd = [cmd for cmd in training_cmd if cmd.count("--lora_alpha") == 0]
+        training_cmd = [cmd for cmd in training_cmd if cmd.count("--rank") == 0]
+        training_cmd = [cmd for cmd in training_cmd if cmd.count("--target_modules") == 0]
+        training_cmd = [cmd for cmd in training_cmd if cmd.count("--training_type") == 0]
+        training_cmd.append("--training_type full-finetune")
+
     if resume_checkpoint > 0:
         training_cmd.append(f"--resume_from_checkpoint {resume_checkpoint}")
     optimizer_cmd = [
@@ -193,7 +232,9 @@ def main():
     src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../3rdparty/finetrainers/train.py")
     print(src)
 
-    os.environ["WANDB_MODE"] = "offline"
+    if not online_mode:
+        os.environ["WANDB_MODE"] = "offline"
+
     os.environ["NCCL_P2P_DISABLE"] = "1"
     os.environ["TORCH_NCCL_ENABLE_MONITORING"] = "0"
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "INFO"
@@ -203,7 +244,7 @@ def main():
         f"cd {directory} &&",
         "torchrun",
         "--standalone",
-        "--nproc_per_node=1",
+        f"--nproc_per_node={num_gpus}",
         "--rdzv_backend c10d",
         "--rdzv_endpoint=localhost:0",
         src,
